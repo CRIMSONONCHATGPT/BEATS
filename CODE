@@ -1,0 +1,78 @@
+<!-- PLAY BUTTON -->
+<div id="startWrap" style="text-align:center;margin:20px 0;">
+  <button id="startBtn"
+    style="padding:14px 28px;font-size:18px;border:0;border-radius:10px;
+           background:#d11a2a;color:#fff;cursor:pointer;box-shadow:0 0 18px rgba(255,0,0,0.45);">
+    ▶ Play
+  </button>
+</div>
+
+<!-- VISUALIZER -->
+<canvas id="viz" style="width:100%;height:200px;background:#000;border-radius:10px;"></canvas>
+
+<!-- AUDIO -->
+<audio id="audio" playsinline crossorigin="anonymous"
+       src="https://cdn.bloker.xyz/admin-cloud-storage/1763700455884-2096eba61333.wav">
+</audio>
+
+<script>
+(function(){
+  const canvas = document.getElementById("viz");
+  const ctx = canvas.getContext("2d");
+  const audio = document.getElementById("audio");
+  const startBtn = document.getElementById("startBtn");
+  const startWrap = document.getElementById("startWrap");
+
+  let audioCtx, analyser, sourceNode;
+
+  function resize(){
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
+
+  function draw(){
+    requestAnimationFrame(draw);
+
+    if (!analyser) return;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+
+    ctx.clearRect(0,0,w,h);
+
+    const bars = 64;
+    const barW = w / bars;
+
+    for (let i = 0; i < bars; i++){
+      const v = data[i] / 255;
+      const barH = v * h;
+
+      ctx.fillStyle = `hsl(${i * 5}, 80%, 50%)`;
+      ctx.fillRect(i * barW, h - barH, barW - 1, barH);
+    }
+  }
+
+  startBtn.addEventListener("click", async () => {
+    startWrap.style.display = "none";
+
+    audioCtx = new AudioContext();
+    await audioCtx.resume();
+
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 128;
+
+    sourceNode = audioCtx.createMediaElementSource(audio);
+    sourceNode.connect(analyser);
+    sourceNode.connect(audioCtx.destination);
+
+    audio.play().catch(console.error);
+
+    draw();
+  });
+})();
+</script>
