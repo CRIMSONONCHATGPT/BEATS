@@ -1,78 +1,139 @@
-<!-- PLAY BUTTON -->
-<div id="startWrap" style="text-align:center;margin:20px 0;">
-  <button id="startBtn"
-    style="padding:14px 28px;font-size:18px;border:0;border-radius:10px;
-           background:#d11a2a;color:#fff;cursor:pointer;box-shadow:0 0 18px rgba(255,0,0,0.45);">
-    ▶ Play
-  </button>
+<!-- PLAY + STATUS UI -->
+<div id="vizRoot" style="font-family:system-ui,-apple-system,sans-serif;color:#f6f8fa;text-align:center;max-width:720px;margin:0 auto;">
+  <div id="startWrap" style="margin:20px 0;">
+    <button id="startBtn"
+      style="padding:14px 28px;font-size:18px;border:0;border-radius:10px;
+             background:#d11a2a;color:#fff;cursor:pointer;box-shadow:0 0 18px rgba(255,0,0,0.45);">
+      ▶ Share screen audio
+    </button>
+  </div>
+  <div data-status style="margin:12px 0;font-size:14px;color:#cdd9e5;">Click the button to start visualizing your screen audio.</div>
 </div>
 
 <!-- VISUALIZER -->
-<canvas id="viz" style="width:100%;height:200px;background:#000;border-radius:10px;"></canvas>
-
-<!-- AUDIO -->
-<audio id="audio" playsinline crossorigin="anonymous"
-       src="https://cdn.bloker.xyz/admin-cloud-storage/1763700455884-2096eba61333.wav">
-</audio>
+<canvas id="viz" style="display:block;width:100%;height:220px;background:#000;border-radius:10px;"></canvas>
 
 <script>
 (function(){
   const canvas = document.getElementById("viz");
   const ctx = canvas.getContext("2d");
-  const audio = document.getElementById("audio");
   const startBtn = document.getElementById("startBtn");
   const startWrap = document.getElementById("startWrap");
+  const statusEl = document.querySelector("[data-status]");
 
-  let audioCtx, analyser, sourceNode;
+  let audioCtx, analyser, sourceNode, animationId, stream;
+  let pixelRatio = window.devicePixelRatio || 1;
+  const bars = 96;
+
+  function setStatus(msg){
+    if (statusEl) statusEl.textContent = msg;
+  }
 
   function resize(){
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
+    pixelRatio = window.devicePixelRatio || 1;
+    canvas.width = canvas.clientWidth * pixelRatio;
+    canvas.height = canvas.clientHeight * pixelRatio;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(pixelRatio, pixelRatio);
   }
   resize();
   window.addEventListener("resize", resize);
 
-  function draw(){
-    requestAnimationFrame(draw);
-
-    if (!analyser) return;
-
-    const w = canvas.width;
-    const h = canvas.height;
-
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(data);
-
-    ctx.clearRect(0,0,w,h);
-
-    const bars = 64;
-    const barW = w / bars;
-
-    for (let i = 0; i < bars; i++){
-      const v = data[i] / 255;
-      const barH = v * h;
-
-      ctx.fillStyle = `hsl(${i * 5}, 80%, 50%)`;
-      ctx.fillRect(i * barW, h - barH, barW - 1, barH);
+  function stopCurrentStream(){
+    if (stream){
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+    if (sourceNode){
+      sourceNode.disconnect();
+      sourceNode = null;
+    }
+    if (analyser){
+      analyser.disconnect();
+      analyser = null;
+    }
+    if (animationId){
+      cancelAnimationFrame(animationId);
+      animationId = null;
     }
   }
 
+  function draw(){
+    if (!analyser) return;
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const barW = w / bars;
+    for (let i = 0; i < bars; i++){
+      const v = data[i] / 255;
+      const barH = v * h;
+      ctx.fillStyle = `hsl(${i * 3.2}, 80%, 55%)`;
+      ctx.fillRect(i * barW, h - barH, barW - 1, barH);
+    }
+
+    animationId = requestAnimationFrame(draw);
+  }
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia){
+    setStatus("Your browser does not support screen capture. Please update and try again.");
+    startBtn.disabled = true;
+    return;
+  }
+
   startBtn.addEventListener("click", async () => {
+    setStatus("Requesting screen share with audio...");
     startWrap.style.display = "none";
 
-    audioCtx = new AudioContext();
-    await audioCtx.resume();
+    try {
+      stopCurrentStream();
 
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 128;
+      const capture = await navigator.mediaDevices.getDisplayMedia({
+        video: { displaySurface: "monitor" },
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          suppressLocalAudioPlayback: false
+        }
+      });
 
-    sourceNode = audioCtx.createMediaElementSource(audio);
-    sourceNode.connect(analyser);
-    sourceNode.connect(audioCtx.destination);
+      const audioTracks = capture.getAudioTracks();
+      if (!audioTracks.length){
+        setStatus("No audio was shared. Please enable audio when sharing your screen.");
+        startWrap.style.display = "block";
+        capture.getTracks().forEach(t => t.stop());
+        return;
+      }
 
-    audio.play().catch(console.error);
+      capture.getVideoTracks().forEach(t => t.stop());
+      stream = capture;
 
-    draw();
+      audioCtx = audioCtx || new AudioContext();
+      await audioCtx.resume();
+
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      sourceNode = audioCtx.createMediaStreamSource(stream);
+      sourceNode.connect(analyser);
+
+      setStatus("Listening to your screen audio...");
+      draw();
+
+      audioTracks[0].addEventListener("ended", () => {
+        stopCurrentStream();
+        setStatus("Screen share ended. Click the button to start again.");
+        startWrap.style.display = "block";
+      });
+    } catch (err) {
+      console.error(err);
+      setStatus("Screen share was blocked or failed. Please allow access and try again.");
+      startWrap.style.display = "block";
+    }
   });
 })();
 </script>
