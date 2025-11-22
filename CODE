@@ -13,11 +13,14 @@
       color: #e8edf3;
       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
+    body {
+      display: grid;
+      place-items: center;
+    }
     #vizRoot {
       position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
       width: min(640px, calc(100vw - 32px));
       box-sizing: border-box;
       text-align: center;
@@ -32,6 +35,11 @@
       flex-direction: column;
       align-items: stretch;
       gap: 10px;
+      backdrop-filter: blur(18px) saturate(180%);
+      box-shadow:
+        0 0 28px rgba(0, 0, 0, 0.45),
+        0 0 60px rgba(255, 99, 71, 0.18),
+        0 0 120px rgba(70, 165, 255, 0.12);
     }
     #startWrap {
       width: 100%;
@@ -44,11 +52,14 @@
       font-size: 18px;
       border: 0;
       border-radius: 10px;
-      background: linear-gradient(120deg, #ff3355, #ff6f22);
+      background: linear-gradient(120deg, hsl(var(--accent-hue, 15), 90%, 62%), hsl(calc(var(--accent-hue, 15) + 70), 85%, 58%));
       color: #fff;
       cursor: pointer;
-      box-shadow: 0 0 18px rgba(255, 64, 64, 0.5);
-      transition: transform 160ms ease, box-shadow 160ms ease;
+      box-shadow:
+        0 0 18px hsla(var(--accent-hue, 15), 95%, 60%, 0.55),
+        0 0 36px hsla(calc(var(--accent-hue, 15) + 120), 95%, 70%, 0.28);
+      transition: transform 160ms ease, box-shadow 160ms ease, filter 120ms ease;
+      animation: breathe 2.2s ease-in-out infinite;
     }
     #startBtn:hover {
       transform: translateY(-2px) scale(1.01);
@@ -76,9 +87,14 @@
       display: block;
       background: #000;
     }
+    @keyframes breathe {
+      0% { filter: drop-shadow(0 0 10px hsla(var(--accent-hue, 15), 90%, 70%, 0.4)); }
+      50% { filter: drop-shadow(0 0 24px hsla(calc(var(--accent-hue, 15) + 60), 100%, 70%, 0.65)); }
+      100% { filter: drop-shadow(0 0 10px hsla(var(--accent-hue, 15), 90%, 70%, 0.4)); }
+    }
     @media (max-width: 540px) {
       #vizRoot {
-        top: 12px;
+        top: 50%;
         padding: 10px 12px;
       }
       #startBtn {
@@ -117,6 +133,7 @@
     let lastBeat = 0;
     const shockwaves = [];
     let hueShift = 0;
+    let accentHue = 24;
 
     function setStatus(msg){
       if (statusEl) statusEl.innerHTML = msg;
@@ -170,6 +187,11 @@
       const midEnergy = freq.slice(midStart, midStart + midBins).reduce((a,b) => a + b, 0) / (midBins * 255);
       const overallEnergy = freq.reduce((a,b) => a + b, 0) / (freq.length * 255);
 
+      // Loudness-driven accent hue for UI + canvas accents
+      const loudnessHue = (hueShift + overallEnergy * 320 + bassEnergy * 180) % 360;
+      accentHue = accentHue * 0.85 + loudnessHue * 0.15;
+      document.documentElement.style.setProperty("--accent-hue", accentHue.toFixed(1));
+
       const now = performance.now();
       if (bassEnergy > beatThreshold && now - lastBeat > 180){
         beatPulse = 1;
@@ -186,9 +208,11 @@
       ctx.clearRect(0, 0, w, h);
 
       // Bass-driven zoom bursts & audio-driven camera shake
-      const shake = bassEnergy * 18;
-      const zoom = 1 + bassEnergy * 0.14 + beatPulse * 0.08;
+      const shake = Math.pow(bassEnergy, 1.2) * 40 + flashPulse * 12;
+      const spin = (Math.random() - 0.5) * bassEnergy * 0.18;
+      const zoom = 1 + bassEnergy * 0.18 + beatPulse * 0.12 + overallEnergy * 0.05;
       ctx.translate(w/2, h/2);
+      ctx.rotate(spin);
       ctx.scale(zoom, zoom);
       ctx.translate(-w/2 + (Math.random() - 0.5) * shake, -h/2 + (Math.random() - 0.5) * shake);
 
@@ -226,6 +250,24 @@
         ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
         ctx.fillRect(i * barW, h - barH, barW - 1.5, barH);
       }
+
+      // Neon particle shards
+      ctx.save();
+      ctx.globalCompositeOperation = "color-dodge";
+      ctx.lineWidth = 1.5 + overallEnergy * 3;
+      for (let i = 0; i < 40; i++){
+        const t = (i / 40) * Math.PI * 2 + now * 0.002 + bassEnergy * 4;
+        const radius = (0.25 + Math.random() * 0.4 + midEnergy * 0.6) * Math.min(w, h) * 0.5;
+        const px = w/2 + Math.cos(t) * radius;
+        const py = h/2 + Math.sin(t) * radius;
+        const len = 14 + Math.random() * 50 * (overallEnergy + 0.2);
+        ctx.strokeStyle = `hsla(${(accentHue + i * 5) % 360}, 100%, ${60 + midEnergy * 30}%, ${0.35 + overallEnergy * 0.4})`;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + Math.cos(t) * len, py + Math.sin(t) * len);
+        ctx.stroke();
+      }
+      ctx.restore();
 
       // Shockwave pulse (screen expands/warps outward on kicks)
       for (let i = shockwaves.length - 1; i >= 0; i--){
