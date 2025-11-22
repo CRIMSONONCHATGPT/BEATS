@@ -108,6 +108,33 @@
     .panel h3 { margin: 0 0 8px; font-size: 16px; color: #f0f4ff; letter-spacing: 0.2px; }
     .panel ol, .panel ul { margin: 0; padding-left: 18px; color: #c9d5e8; line-height: 1.6; }
     #helpers { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    #toast {
+      position: fixed;
+      top: 18px;
+      right: 18px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      background: rgba(8, 12, 22, 0.85);
+      color: #f5f7fb;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+      transform: translateY(-10px);
+      transition: opacity 220ms ease, transform 220ms ease;
+      pointer-events: none;
+      z-index: 6;
+      font-size: 14px;
+      letter-spacing: 0.3px;
+    }
+    #toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    body.text-hidden #vizRoot {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 200ms ease;
+    }
     canvas#viz {
       position: fixed;
       inset: 0;
@@ -142,6 +169,7 @@
   </style>
   <div id="ambientGlow"></div>
   <canvas id="viz"></canvas>
+  <div id="toast" role="status" aria-live="polite"></div>
 
   <div id="vizRoot">
     <header>
@@ -180,6 +208,7 @@
     const ctx = canvas.getContext("2d");
     const startBtn = document.getElementById("startBtn");
     const statusEl = document.querySelector("[data-status]");
+    const toastEl = document.getElementById("toast");
     const videoKeepAlive = document.createElement("video");
     videoKeepAlive.muted = true;
     videoKeepAlive.playsInline = true;
@@ -210,12 +239,31 @@
     let lastBeat = 0;
     const shockwaves = [];
     let accentHue = 24;
+    let toastTimeout;
 
     function setStatus(msg, tone = "normal"){
       if (statusEl){
         statusEl.innerHTML = msg;
         statusEl.dataset.tone = tone;
       }
+    }
+
+    function showToast(message){
+      if (!toastEl) return;
+      toastEl.textContent = message;
+      toastEl.classList.add("visible");
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        toastEl.classList.remove("visible");
+      }, 3000);
+    }
+
+    function hideText(){
+      document.body.classList.add("text-hidden");
+    }
+
+    function showText(){
+      document.body.classList.remove("text-hidden");
     }
 
     function resize(){
@@ -245,6 +293,7 @@
         cancelAnimationFrame(animationId);
         animationId = null;
       }
+      showText();
       if (videoKeepAlive){
         try { videoKeepAlive.pause(); } catch (_) {}
         videoKeepAlive.srcObject = null;
@@ -468,6 +517,8 @@
         sourceNode.connect(analyser);
 
         setStatus("Listening to your screen audio. Keep screen audio shared for full-reactive chaos.");
+        hideText();
+        showToast("Audio successfully connected");
         draw();
 
         audioTracks[0].addEventListener("ended", () => {
