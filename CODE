@@ -129,7 +129,26 @@
       text-align: right;
       color: #fff;
     }
+    .slider-control .sub { color: #9fb3d8; font-size: 12px; letter-spacing: 0.2px; }
+    .slider-control .pill {
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .slider-control .value.with-auto { display: flex; align-items: center; gap: 6px; }
+    .slider-control .value small { color: #9fb3d8; font-weight: 600; }
     .slider-control.hidden { display: none; }
+    .slider-control.popped {
+      animation: popIn 360ms cubic-bezier(0.18, 0.82, 0.3, 1.2);
+    }
+    @keyframes popIn {
+      0% { opacity: 0; transform: translateY(8px) scale(0.94); }
+      70% { opacity: 1; transform: translateY(-2px) scale(1.04); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
     #toast {
       position: fixed;
       top: 18px;
@@ -204,7 +223,8 @@
       <label id="insanityControl" class="slider-control hidden">
         <span>Insanity</span>
         <input id="insanitySlider" type="range" min="1" max="100" value="70" aria-label="Insanity level">
-        <span id="insanityValue" class="value">70</span>
+        <span class="sub">Auto-reacts to tempo & energy</span>
+        <span id="insanityValue" class="value with-auto"><span id="insanityManualValue">70</span> <small id="insanityAutoValue" class="pill">auto</small></span>
       </label>
       <div data-status data-tone="normal">Click start and choose <strong>Share system audio</strong> in the picker.</div>
     </div>
@@ -239,6 +259,8 @@
     const insanityControl = document.getElementById("insanityControl");
     const insanitySlider = document.getElementById("insanitySlider");
     const insanityValue = document.getElementById("insanityValue");
+    const insanityManualValue = document.getElementById("insanityManualValue");
+    const insanityAutoValue = document.getElementById("insanityAutoValue");
     const videoKeepAlive = document.createElement("video");
     videoKeepAlive.muted = true;
     videoKeepAlive.playsInline = true;
@@ -277,6 +299,7 @@
     let accentHue = 24;
     let toastTimeout;
     let insanityLevel = 70;
+    let autoInsanity = 0.65;
     let insanityIntensity = 1;
 
     function setStatus(msg, tone = "normal"){
@@ -304,14 +327,12 @@
       document.body.classList.remove("text-hidden");
     }
 
+    const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
+
     function updateInsanity(level){
       insanityLevel = Number(level);
-      insanityIntensity = Math.max(
-        0.14 + (insanityLevel / 100) * 0.28,
-        Math.pow(insanityLevel / 70, 1.35)
-      );
-      if (insanityValue){
-        insanityValue.textContent = insanityLevel;
+      if (insanityManualValue){
+        insanityManualValue.textContent = insanityLevel;
       }
     }
     updateInsanity(insanityLevel);
@@ -345,6 +366,7 @@
       }
       showText();
       insanityControl?.classList.add("hidden");
+      insanityControl?.classList.remove("popped");
       if (videoKeepAlive){
         try { videoKeepAlive.pause(); } catch (_) {}
         videoKeepAlive.srcObject = null;
@@ -373,8 +395,20 @@
       const bassEnergy = freq.slice(0, bassBins).reduce((a,b) => a + b, 0) / (bassBins * 255);
       const midEnergy = freq.slice(midStart, midStart + midBins).reduce((a,b) => a + b, 0) / (midBins * 255);
       const overallEnergy = freq.reduce((a,b) => a + b, 0) / (freq.length * 255);
+
+      const autoTarget = clamp(
+        0.32 + overallEnergy * 0.9 + tempoFactor * 0.55 + dropPulse * 0.8 + (bassEnergy - bassMemory) * 1.2,
+        0.18,
+        1.2
+      );
+      autoInsanity = autoInsanity * 0.9 + autoTarget * 0.1;
+      const blendedInsanity = clamp((insanityLevel / 100) * 0.55 + autoInsanity * 0.65, 0.16, 1.2);
+      insanityIntensity = Math.max(0.14 + blendedInsanity * 0.7, Math.pow(blendedInsanity, 1.2));
+      const insanityChaos = Math.pow(blendedInsanity, 1.4);
       const insanityBoost = insanityIntensity;
-      const insanityChaos = Math.pow(insanityLevel / 100, 1.4);
+      if (insanityAutoValue){
+        insanityAutoValue.textContent = `${Math.round(autoInsanity * 100)} auto`;
+      }
 
       // Track sudden low-end surges for "beat drop" chaos
       const bassDelta = bassEnergy - bassMemory;
@@ -608,6 +642,7 @@
         hideText();
         showToast("Audio successfully connected");
         insanityControl?.classList.remove("hidden");
+        requestAnimationFrame(() => insanityControl?.classList.add("popped"));
         draw();
 
         audioTracks[0].addEventListener("ended", () => {
