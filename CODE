@@ -455,6 +455,8 @@ const autoTarget = clamp(
 );
 autoInsanity = autoInsanity * 0.9 + autoTarget * 0.1;
 const manualInsanity = softenManualInsanity(insanityLevel);
+const motionFactor = Math.pow(manualInsanity, 1.4);
+const colorFactor = Math.pow(manualInsanity, 1.25);
 const blendedInsanity = clamp(manualInsanity * 0.55 + autoInsanity * 0.65, 0.16, 1.2);
 insanityIntensity = Math.max(0.14 + blendedInsanity * 0.7, Math.pow(blendedInsanity, 1.2));
 const insanityChaos = Math.pow(blendedInsanity, 1.4);
@@ -473,10 +475,10 @@ dropPulse *= 0.9;
 
 const now = performance.now();
 // Gradually glide between fixed neon hues instead of rainbow spinning
-const tempoHueSwing = tempoFactor * (18 * insanityBoost);
-const targetHueWithTempo = targetHue + Math.sin(now * 0.0006 * (1 + tempoFactor * 1.4)) * tempoHueSwing;
+const tempoHueSwing = tempoFactor * (18 * insanityBoost) * colorFactor;
+const targetHueWithTempo = targetHue + Math.sin(now * 0.0006 * (1 + tempoFactor * 1.4) * (0.2 + colorFactor * 0.8)) * tempoHueSwing;
 baseHue = baseHue * 0.9 + targetHueWithTempo * 0.1;
-const accentSpread = 10 + overallEnergy * 12 * insanityBoost + bassEnergy * 18 * insanityBoost + tempoFactor * (14 * insanityBoost);
+const accentSpread = (10 + overallEnergy * 12 * insanityBoost + bassEnergy * 18 * insanityBoost + tempoFactor * (14 * insanityBoost)) * (0.2 + colorFactor * 0.8);
 accentHue = accentHue * 0.9 + (baseHue + Math.sin(now * 0.0015) * accentSpread) * 0.1;
 document.documentElement.style.setProperty("--accent-hue", accentHue.toFixed(1));
 
@@ -508,14 +510,14 @@ beatThreshold = Math.max(0.18, beatThreshold * 0.995 + bassEnergy * 0.005);
 beatPulse *= 0.92;
 flashPulse *= 0.9;
 strobePulse *= 0.85;
-const speedBoost = (0.9 + tempoFactor * 0.8 + dropPulse * 0.9) * insanityBoost;
+const speedBoost = (0.9 + tempoFactor * 0.8 + dropPulse * 0.9) * insanityBoost * motionFactor;
 
 ctx.clearRect(0, 0, w, h);
 
 // Bass-driven zoom bursts & audio-driven camera shake
-const shake = (Math.pow(bassEnergy, 1.2) * 55 + flashPulse * 18 + strobePulse * 22) * speedBoost * (0.5 + insanityBoost * 0.5);
-const spin = (Math.random() - 0.5) * (bassEnergy + beatPulse * 0.4) * 0.22 * speedBoost * (0.4 + insanityBoost * 0.6);
-const zoom = 1 + (bassEnergy * 0.2 + beatPulse * 0.16 + overallEnergy * 0.08) * speedBoost * (0.5 + insanityBoost * 0.5);
+const shake = (Math.pow(bassEnergy, 1.2) * 55 + flashPulse * 18 + strobePulse * 22) * speedBoost * (0.5 + insanityBoost * 0.5) * (0.25 + motionFactor * 0.75);
+const spin = (Math.random() - 0.5) * (bassEnergy + beatPulse * 0.4) * 0.22 * speedBoost * (0.4 + insanityBoost * 0.6) * (0.25 + motionFactor * 0.75);
+const zoom = 1 + (bassEnergy * 0.2 + beatPulse * 0.16 + overallEnergy * 0.08) * speedBoost * (0.5 + insanityBoost * 0.5) * (0.25 + motionFactor * 0.75);
 ctx.translate(w/2, h/2);
 ctx.rotate(spin);
 ctx.scale(zoom, zoom);
