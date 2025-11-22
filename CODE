@@ -369,6 +369,12 @@ document.body.classList.remove("text-hidden");
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+function softenManualInsanity(level){
+const normalized = clamp(level / 140, 0, 1);
+const gentleRamp = Math.min(normalized / 0.35, 1);
+return normalized * (0.1 + 0.9 * gentleRamp * gentleRamp);
+}
+
 function updateInsanity(level){
 insanityLevel = Number(level);
 if (insanityManualValue){
@@ -448,7 +454,8 @@ const autoTarget = clamp(
 1.2
 );
 autoInsanity = autoInsanity * 0.9 + autoTarget * 0.1;
-const blendedInsanity = clamp((insanityLevel / 100) * 0.55 + autoInsanity * 0.65, 0.16, 1.2);
+const manualInsanity = softenManualInsanity(insanityLevel);
+const blendedInsanity = clamp(manualInsanity * 0.55 + autoInsanity * 0.65, 0.16, 1.2);
 insanityIntensity = Math.max(0.14 + blendedInsanity * 0.7, Math.pow(blendedInsanity, 1.2));
 const insanityChaos = Math.pow(blendedInsanity, 1.4);
 const insanityBoost = insanityIntensity;
