@@ -127,12 +127,18 @@
     let pixelRatio = window.devicePixelRatio || 1;
     const bars = 120;
 
+    // Color palette locked to deep neon tones (no rainbow spinning)
+    const palette = [0, 300, 140]; // red → purple → green
+    let paletteIndex = 0;
+    let targetHue = palette[paletteIndex];
+    let baseHue = targetHue;
+
     let beatThreshold = 0.32;
     let beatPulse = 0;
     let flashPulse = 0;
+    let strobePulse = 0;
     let lastBeat = 0;
     const shockwaves = [];
-    let hueShift = 0;
     let accentHue = 24;
 
     function setStatus(msg){
@@ -187,47 +193,54 @@
       const midEnergy = freq.slice(midStart, midStart + midBins).reduce((a,b) => a + b, 0) / (midBins * 255);
       const overallEnergy = freq.reduce((a,b) => a + b, 0) / (freq.length * 255);
 
-      // Loudness-driven accent hue for UI + canvas accents
-      const loudnessHue = (hueShift + overallEnergy * 320 + bassEnergy * 180) % 360;
-      accentHue = accentHue * 0.85 + loudnessHue * 0.15;
+      // Gradually glide between fixed neon hues (red → purple → green) instead of rainbow spinning
+      baseHue = baseHue * 0.9 + targetHue * 0.1;
+      accentHue = accentHue * 0.85 + (baseHue + overallEnergy * 25 + bassEnergy * 45) * 0.15;
       document.documentElement.style.setProperty("--accent-hue", accentHue.toFixed(1));
 
       const now = performance.now();
       if (bassEnergy > beatThreshold && now - lastBeat > 180){
         beatPulse = 1;
         flashPulse = 1;
+        strobePulse = 1;
         shockwaves.push({ progress: 0 });
+        paletteIndex = (paletteIndex + 1) % palette.length;
+        targetHue = palette[paletteIndex];
         beatThreshold = bassEnergy * 0.92;
         lastBeat = now;
       }
       beatThreshold = Math.max(0.18, beatThreshold * 0.995 + bassEnergy * 0.005);
       beatPulse *= 0.92;
       flashPulse *= 0.9;
-      hueShift = (hueShift + 0.8 + overallEnergy * 4) % 360;
+      strobePulse *= 0.85;
 
       ctx.clearRect(0, 0, w, h);
 
       // Bass-driven zoom bursts & audio-driven camera shake
-      const shake = Math.pow(bassEnergy, 1.2) * 40 + flashPulse * 12;
-      const spin = (Math.random() - 0.5) * bassEnergy * 0.18;
-      const zoom = 1 + bassEnergy * 0.18 + beatPulse * 0.12 + overallEnergy * 0.05;
+      const shake = Math.pow(bassEnergy, 1.2) * 55 + flashPulse * 18 + strobePulse * 22;
+      const spin = (Math.random() - 0.5) * (bassEnergy + beatPulse * 0.4) * 0.22;
+      const zoom = 1 + bassEnergy * 0.2 + beatPulse * 0.16 + overallEnergy * 0.08;
       ctx.translate(w/2, h/2);
       ctx.rotate(spin);
       ctx.scale(zoom, zoom);
       ctx.translate(-w/2 + (Math.random() - 0.5) * shake, -h/2 + (Math.random() - 0.5) * shake);
 
+      // Subtle psychedelic warp using sine-based skew on the camera
+      const warp = Math.sin(now * 0.002) * (0.01 + overallEnergy * 0.02) + beatPulse * 0.02;
+      ctx.transform(1, warp, -warp, 1, 0, 0);
+
       // Background gradient with saturation spikes
       const saturationSpike = 60 + Math.min(40, bassEnergy * 120 + midEnergy * 80);
       const bg = ctx.createRadialGradient(w*0.35, h*0.35, h*0.05, w*0.5, h*0.5, h*0.8);
-      bg.addColorStop(0, `hsl(${(hueShift + 30) % 360}, ${saturationSpike}%, ${18 + overallEnergy * 18}%)`);
-      bg.addColorStop(0.6, `hsl(${(hueShift + 100) % 360}, ${saturationSpike}%, ${8 + bassEnergy * 12}%)`);
-      bg.addColorStop(1, `hsl(${(hueShift + 180) % 360}, ${saturationSpike * 0.6}%, 4%)`);
+      bg.addColorStop(0, `hsl(${(baseHue + 20) % 360}, ${saturationSpike}%, ${18 + overallEnergy * 18}%)`);
+      bg.addColorStop(0.6, `hsl(${(baseHue + 80) % 360}, ${saturationSpike}%, ${8 + bassEnergy * 12}%)`);
+      bg.addColorStop(1, `hsl(${(baseHue + 160) % 360}, ${saturationSpike * 0.6}%, 4%)`);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
       // Waveform ribbon
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = `hsla(${(hueShift + 80) % 360}, 85%, 75%, ${0.5 + overallEnergy * 0.35})`;
+      ctx.strokeStyle = `hsla(${(baseHue + 60) % 360}, 85%, 75%, ${0.5 + overallEnergy * 0.35})`;
       ctx.beginPath();
       for (let i = 0; i < time.length; i++){
         const t = time[i] / 255;
@@ -244,9 +257,9 @@
         const idx = Math.floor(i * (freq.length / bars));
         const v = freq[idx] / 255;
         const barH = Math.pow(v, 1.2) * h;
-        const hue = (hueShift + i * 2.4 + flashPulse * 80) % 360;
-        const sat = Math.min(100, 70 + saturationSpike * 0.3 + flashPulse * 30);
-        const light = 45 + v * 25 + flashPulse * 20;
+        const hue = (baseHue + (i / bars) * 40 + flashPulse * 60) % 360;
+        const sat = Math.min(100, 72 + saturationSpike * 0.35 + flashPulse * 35);
+        const light = 42 + v * 26 + flashPulse * 22;
         ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
         ctx.fillRect(i * barW, h - barH, barW - 1.5, barH);
       }
@@ -261,7 +274,7 @@
         const px = w/2 + Math.cos(t) * radius;
         const py = h/2 + Math.sin(t) * radius;
         const len = 14 + Math.random() * 50 * (overallEnergy + 0.2);
-        ctx.strokeStyle = `hsla(${(accentHue + i * 5) % 360}, 100%, ${60 + midEnergy * 30}%, ${0.35 + overallEnergy * 0.4})`;
+        ctx.strokeStyle = `hsla(${(accentHue + i * 4) % 360}, 100%, ${60 + midEnergy * 30}%, ${0.35 + overallEnergy * 0.4})`;
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(px + Math.cos(t) * len, py + Math.sin(t) * len);
@@ -269,13 +282,26 @@
       }
       ctx.restore();
 
+      // Glitch / distortion slices on stronger hits
+      if (Math.random() < 0.12 + bassEnergy * 0.25 + beatPulse * 0.45){
+        const slices = 2 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < slices; i++){
+          const sliceH = h * (0.03 + Math.random() * 0.1);
+          const y = Math.random() * (h - sliceH);
+          const drift = (Math.random() - 0.5) * (30 + bassEnergy * 120 + beatPulse * 180);
+          ctx.globalCompositeOperation = "lighter";
+          ctx.drawImage(canvas, 0, y, w, sliceH, drift, y, w, sliceH);
+        }
+        ctx.globalCompositeOperation = "source-over";
+      }
+
       // Shockwave pulse (screen expands/warps outward on kicks)
       for (let i = shockwaves.length - 1; i >= 0; i--){
         const sw = shockwaves[i];
         sw.progress += 0.025 + bassEnergy * 0.09;
         const radius = Math.min(w, h) * sw.progress * 1.4;
         const g = ctx.createRadialGradient(w/2, h/2, radius * 0.25, w/2, h/2, radius);
-        g.addColorStop(0, `hsla(${(hueShift + 30) % 360}, 95%, 80%, ${0.4 - sw.progress * 0.3})`);
+        g.addColorStop(0, `hsla(${(baseHue + 30) % 360}, 95%, 80%, ${0.4 - sw.progress * 0.3})`);
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.globalCompositeOperation = "screen";
         ctx.beginPath();
@@ -293,9 +319,10 @@
       }
 
       // Audio-Reactive strobing & vignette flicker
-      const strobeAlpha = Math.max(0, Math.sin(now * 0.018) * (overallEnergy * 1.2));
+      const strobeAlpha = Math.max(strobePulse * 0.9, Math.sin(now * 0.02) * (overallEnergy * 1.4));
       if (strobeAlpha > 0.02){
-        ctx.fillStyle = `rgba(255,255,255,${strobeAlpha})`;
+        const hueFlash = (baseHue + 30) % 360;
+        ctx.fillStyle = `hsla(${hueFlash}, 95%, 75%, ${strobeAlpha * 0.55 + flashPulse * 0.45})`;
         ctx.fillRect(0, 0, w, h);
       }
 
