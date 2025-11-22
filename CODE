@@ -52,12 +52,12 @@
       font-size: 18px;
       border: 0;
       border-radius: 10px;
-      background: linear-gradient(120deg, hsl(var(--accent-hue, 15), 90%, 62%), hsl(calc(var(--accent-hue, 15) + 70), 85%, 58%));
+      background: linear-gradient(120deg, hsl(var(--accent-hue, 15), 90%, 65%), hsl(var(--accent-hue, 15), 90%, 50%));
       color: #fff;
       cursor: pointer;
       box-shadow:
         0 0 18px hsla(var(--accent-hue, 15), 95%, 60%, 0.55),
-        0 0 36px hsla(calc(var(--accent-hue, 15) + 120), 95%, 70%, 0.28);
+        0 0 36px hsla(var(--accent-hue, 15), 95%, 50%, 0.32);
       transition: transform 160ms ease, box-shadow 160ms ease, filter 120ms ease;
       animation: breathe 2.2s ease-in-out infinite;
     }
@@ -75,9 +75,32 @@
       cursor: not-allowed;
     }
     [data-status] {
-      margin-top: 10px;
-      font-size: 14px;
-      color: #cdd9e5;
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: min(420px, 70vw);
+      padding: 12px 14px;
+      font-size: 15px;
+      color: #dfe8f5;
+      background: rgba(6, 10, 20, 0.72);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.4);
+      text-align: right;
+      z-index: 7;
+      line-height: 1.4;
+      transition: transform 180ms ease, box-shadow 180ms ease, color 180ms ease, background 180ms ease;
+    }
+    [data-status][data-tone="warn"] {
+      font-size: 22px;
+      font-weight: 800;
+      color: #ffb3c1;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 71, 87, 0.35), rgba(80, 10, 22, 0.8));
+      border-color: rgba(255, 99, 71, 0.5);
+      box-shadow:
+        0 0 25px rgba(255, 71, 87, 0.35),
+        0 0 60px rgba(0, 0, 0, 0.6);
+      transform: scale(1.04);
     }
     canvas#viz {
       position: fixed;
@@ -89,7 +112,7 @@
     }
     @keyframes breathe {
       0% { filter: drop-shadow(0 0 10px hsla(var(--accent-hue, 15), 90%, 70%, 0.4)); }
-      50% { filter: drop-shadow(0 0 24px hsla(calc(var(--accent-hue, 15) + 60), 100%, 70%, 0.65)); }
+      50% { filter: drop-shadow(0 0 24px hsla(var(--accent-hue, 15), 100%, 70%, 0.6)); }
       100% { filter: drop-shadow(0 0 10px hsla(var(--accent-hue, 15), 90%, 70%, 0.4)); }
     }
     @media (max-width: 540px) {
@@ -110,7 +133,7 @@
     <div id="startWrap">
       <button id="startBtn">▶ Share screen audio</button>
     </div>
-    <div data-status>Click start and choose <strong>Share system audio</strong> so the visualizer can react.</div>
+    <div data-status data-tone="normal">Click start and choose <strong>Share system audio</strong> so the visualizer can react.</div>
   </div>
 
   <canvas id="viz"></canvas>
@@ -127,11 +150,13 @@
     let pixelRatio = window.devicePixelRatio || 1;
     const bars = 120;
 
-    // Color palette locked to deep neon tones (no rainbow spinning)
-    const palette = [0, 300, 140]; // red → purple → green
+    // Color palette locked to deep neon tones (one hue per scene, concert-style swaps)
+    const palette = [320, 28, 212]; // magenta → flame orange → ultraviolet
+    const paletteHoldMs = 4200;
     let paletteIndex = 0;
     let targetHue = palette[paletteIndex];
     let baseHue = targetHue;
+    let lastPaletteShift = 0;
 
     let beatThreshold = 0.32;
     let beatPulse = 0;
@@ -141,8 +166,11 @@
     const shockwaves = [];
     let accentHue = 24;
 
-    function setStatus(msg){
-      if (statusEl) statusEl.innerHTML = msg;
+    function setStatus(msg, tone = "normal"){
+      if (statusEl){
+        statusEl.innerHTML = msg;
+        statusEl.dataset.tone = tone;
+      }
     }
 
     function resize(){
@@ -193,9 +221,10 @@
       const midEnergy = freq.slice(midStart, midStart + midBins).reduce((a,b) => a + b, 0) / (midBins * 255);
       const overallEnergy = freq.reduce((a,b) => a + b, 0) / (freq.length * 255);
 
-      // Gradually glide between fixed neon hues (red → purple → green) instead of rainbow spinning
-      baseHue = baseHue * 0.9 + targetHue * 0.1;
-      accentHue = accentHue * 0.85 + (baseHue + overallEnergy * 25 + bassEnergy * 45) * 0.15;
+      // Gradually glide between fixed neon hues instead of rainbow spinning
+      baseHue = baseHue * 0.92 + targetHue * 0.08;
+      const accentSpread = 10 + overallEnergy * 12 + bassEnergy * 18;
+      accentHue = accentHue * 0.9 + (baseHue + Math.sin(now * 0.0015) * accentSpread) * 0.1;
       document.documentElement.style.setProperty("--accent-hue", accentHue.toFixed(1));
 
       const now = performance.now();
@@ -204,8 +233,11 @@
         flashPulse = 1;
         strobePulse = 1;
         shockwaves.push({ progress: 0 });
-        paletteIndex = (paletteIndex + 1) % palette.length;
-        targetHue = palette[paletteIndex];
+        if (now - lastPaletteShift > paletteHoldMs){
+          paletteIndex = (paletteIndex + 1) % palette.length;
+          targetHue = palette[paletteIndex];
+          lastPaletteShift = now;
+        }
         beatThreshold = bassEnergy * 0.92;
         lastBeat = now;
       }
@@ -232,15 +264,15 @@
       // Background gradient with saturation spikes
       const saturationSpike = 60 + Math.min(40, bassEnergy * 120 + midEnergy * 80);
       const bg = ctx.createRadialGradient(w*0.35, h*0.35, h*0.05, w*0.5, h*0.5, h*0.8);
-      bg.addColorStop(0, `hsl(${(baseHue + 20) % 360}, ${saturationSpike}%, ${18 + overallEnergy * 18}%)`);
-      bg.addColorStop(0.6, `hsl(${(baseHue + 80) % 360}, ${saturationSpike}%, ${8 + bassEnergy * 12}%)`);
-      bg.addColorStop(1, `hsl(${(baseHue + 160) % 360}, ${saturationSpike * 0.6}%, 4%)`);
+      bg.addColorStop(0, `hsl(${baseHue % 360}, ${saturationSpike}%, ${18 + overallEnergy * 18}%)`);
+      bg.addColorStop(0.65, `hsl(${(baseHue + 12) % 360}, ${saturationSpike}%, ${8 + bassEnergy * 12}%)`);
+      bg.addColorStop(1, `hsl(${(baseHue + 24) % 360}, ${saturationSpike * 0.6}%, 4%)`);
       ctx.fillStyle = bg;
       ctx.fillRect(0, 0, w, h);
 
       // Waveform ribbon
       ctx.lineWidth = 2.5;
-      ctx.strokeStyle = `hsla(${(baseHue + 60) % 360}, 85%, 75%, ${0.5 + overallEnergy * 0.35})`;
+      ctx.strokeStyle = `hsla(${baseHue % 360}, 85%, 74%, ${0.5 + overallEnergy * 0.35})`;
       ctx.beginPath();
       for (let i = 0; i < time.length; i++){
         const t = time[i] / 255;
@@ -257,9 +289,9 @@
         const idx = Math.floor(i * (freq.length / bars));
         const v = freq[idx] / 255;
         const barH = Math.pow(v, 1.2) * h;
-        const hue = (baseHue + (i / bars) * 40 + flashPulse * 60) % 360;
-        const sat = Math.min(100, 72 + saturationSpike * 0.35 + flashPulse * 35);
-        const light = 42 + v * 26 + flashPulse * 22;
+        const hue = baseHue % 360;
+        const sat = Math.min(100, 78 + saturationSpike * 0.28 + flashPulse * 35);
+        const light = 44 + v * 24 + flashPulse * 18;
         ctx.fillStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
         ctx.fillRect(i * barW, h - barH, barW - 1.5, barH);
       }
@@ -274,7 +306,7 @@
         const px = w/2 + Math.cos(t) * radius;
         const py = h/2 + Math.sin(t) * radius;
         const len = 14 + Math.random() * 50 * (overallEnergy + 0.2);
-        ctx.strokeStyle = `hsla(${(accentHue + i * 4) % 360}, 100%, ${60 + midEnergy * 30}%, ${0.35 + overallEnergy * 0.4})`;
+        ctx.strokeStyle = `hsla(${accentHue % 360}, 100%, ${60 + midEnergy * 30}%, ${0.35 + overallEnergy * 0.4})`;
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(px + Math.cos(t) * len, py + Math.sin(t) * len);
@@ -301,7 +333,7 @@
         sw.progress += 0.025 + bassEnergy * 0.09;
         const radius = Math.min(w, h) * sw.progress * 1.4;
         const g = ctx.createRadialGradient(w/2, h/2, radius * 0.25, w/2, h/2, radius);
-        g.addColorStop(0, `hsla(${(baseHue + 30) % 360}, 95%, 80%, ${0.4 - sw.progress * 0.3})`);
+        g.addColorStop(0, `hsla(${baseHue % 360}, 95%, 80%, ${0.4 - sw.progress * 0.3})`);
         g.addColorStop(1, "rgba(255,255,255,0)");
         ctx.globalCompositeOperation = "screen";
         ctx.beginPath();
@@ -321,7 +353,7 @@
       // Audio-Reactive strobing & vignette flicker
       const strobeAlpha = Math.max(strobePulse * 0.9, Math.sin(now * 0.02) * (overallEnergy * 1.4));
       if (strobeAlpha > 0.02){
-        const hueFlash = (baseHue + 30) % 360;
+        const hueFlash = baseHue % 360;
         ctx.fillStyle = `hsla(${hueFlash}, 95%, 75%, ${strobeAlpha * 0.55 + flashPulse * 0.45})`;
         ctx.fillRect(0, 0, w, h);
       }
@@ -366,7 +398,7 @@
 
         const audioTracks = capture.getAudioTracks();
         if (!audioTracks.length){
-          setStatus("No audio was shared. Please enable audio when sharing your screen.");
+          setStatus("No audio was shared. Please enable audio when sharing your screen.", "warn");
           startWrap.style.display = "block";
           capture.getTracks().forEach(t => t.stop());
           return;
