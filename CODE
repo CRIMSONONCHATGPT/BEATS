@@ -1,5 +1,15 @@
 <style>
-:root { color-scheme: dark; --accent-hue: 24; }
+:root {
+  color-scheme: dark;
+  --accent-hue: 24;
+  --bg-1: #0a0f1e;
+  --bg-2: #050910;
+  --bg-3: #02040a;
+  --ambient-a: rgba(255, 99, 71, 0.12);
+  --ambient-b: rgba(67, 143, 255, 0.15);
+  --panel-glow-a: rgba(255, 99, 71, 0.18);
+  --panel-glow-b: rgba(70, 165, 255, 0.12);
+}
 * { box-sizing: border-box; }
 html, body {
 margin: 0;
@@ -8,7 +18,7 @@ width: 100%;
 height: 100%;
 min-height: 100vh;
 overflow: hidden;
-background: radial-gradient(circle at 30% 30%, #0a0f1e 0%, #050910 40%, #02040a 70%);
+background: radial-gradient(circle at 30% 30%, var(--bg-1) 0%, var(--bg-2) 40%, var(--bg-3) 70%);
 color: #e8edf3;
 font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -29,8 +39,8 @@ border: 1px solid rgba(255, 255, 255, 0.08);
 border-radius: 18px;
 box-shadow:
 0 0 28px rgba(0, 0, 0, 0.45),
-0 0 60px rgba(255, 99, 71, 0.18),
-0 0 120px rgba(70, 165, 255, 0.12);
+0 0 60px var(--panel-glow-a),
+0 0 120px var(--panel-glow-b);
 backdrop-filter: blur(18px) saturate(180%);
 display: flex;
 flex-direction: column;
@@ -51,6 +61,33 @@ display: flex;
 gap: 12px;
 align-items: center;
 flex-wrap: wrap;
+}
+.control-block {
+  display: grid;
+  gap: 6px;
+  align-items: start;
+  min-width: 220px;
+}
+.control-block label {
+  font-size: 13px;
+  color: #cdd7e8;
+  letter-spacing: 0.2px;
+}
+.control-block select {
+  padding: 12px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(12, 18, 32, 0.82);
+  color: #f7fbff;
+  font-size: 15px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+  outline: none;
+}
+.theme-note {
+  margin: 0;
+  font-size: 12px;
+  color: #9fb3d8;
+  line-height: 1.4;
 }
 #startBtn {
 display: inline-flex;
@@ -223,8 +260,8 @@ z-index: 1;
 #ambientGlow {
 position: fixed;
 inset: 0;
-background: radial-gradient(circle at 20% 20%, rgba(255, 99, 71, 0.12), transparent 45%),
-radial-gradient(circle at 80% 70%, rgba(67, 143, 255, 0.15), transparent 50%);
+background: radial-gradient(circle at 20% 20%, var(--ambient-a), transparent 45%),
+radial-gradient(circle at 80% 70%, var(--ambient-b), transparent 50%);
 filter: blur(60px);
 z-index: 0;
 }
@@ -254,6 +291,14 @@ body { grid-template-columns: 1fr; padding: 18px; align-items: start; }
 </header>
 
 <div id="controls">
+<div class="control-block">
+<label for="themeSelect">Theme</label>
+<select id="themeSelect">
+<option value="neonPulse">Neon Pulse</option>
+<option value="rustJackboys">Rust JackBoys</option>
+</select>
+<p id="themeNote" class="theme-note">Default neon palette that fits most tracks.</p>
+</div>
 <button id="startBtn">▶ Share screen audio</button>
 <div data-status data-tone="normal">Click start and choose <strong>Share system audio</strong> in the picker.</div>
 </div>
@@ -301,6 +346,8 @@ const insanitySlider = document.getElementById("insanitySlider");
 const insanityValue = document.getElementById("insanityValue");
 const insanityManualValue = document.getElementById("insanityManualValue");
 const insanityAutoValue = document.getElementById("insanityAutoValue");
+const themeSelect = document.getElementById("themeSelect");
+const themeNote = document.getElementById("themeNote");
 const videoKeepAlive = document.createElement("video");
 videoKeepAlive.muted = true;
 videoKeepAlive.playsInline = true;
@@ -316,8 +363,29 @@ let audioCtx, analyser, sourceNode, animationId, stream;
 let pixelRatio = window.devicePixelRatio || 1;
 const bars = 120;
 
-// Color palette locked to deep neon tones (one hue per scene, concert-style swaps)
-const palette = [320, 28, 212]; // magenta → flame orange → ultraviolet
+const themes = {
+neonPulse: {
+label: "Neon Pulse",
+description: "Default neon palette that fits most tracks.",
+palette: [320, 28, 212],
+accentHue: 24,
+background: ["#0a0f1e", "#050910", "#02040a"],
+ambient: ["rgba(255, 99, 71, 0.12)", "rgba(67, 143, 255, 0.15)"],
+panelGlow: ["rgba(255, 99, 71, 0.18)", "rgba(70, 165, 255, 0.12)"]
+},
+rustJackboys: {
+label: "Rust JackBoys",
+description: "Rust-and-smoke haze tuned for JACKBOYS energy.",
+palette: [22, 14, 36],
+accentHue: 18,
+background: ["#120b09", "#1a0f0c", "#060304"],
+ambient: ["rgba(255, 116, 54, 0.2)", "rgba(110, 79, 52, 0.2)"],
+panelGlow: ["rgba(255, 116, 54, 0.28)", "rgba(133, 92, 60, 0.16)"]
+}
+};
+
+let currentThemeKey = "neonPulse";
+let palette = themes[currentThemeKey].palette.slice();
 const paletteHoldMs = 4200;
 let paletteIndex = 0;
 let targetHue = palette[paletteIndex];
@@ -369,6 +437,35 @@ document.body.classList.remove("text-hidden");
 
 const clamp = (n, min, max) => Math.min(max, Math.max(min, n));
 
+function applyTheme(themeKey){
+const theme = themes[themeKey] || themes.neonPulse;
+currentThemeKey = themeKey in themes ? themeKey : "neonPulse";
+palette = theme.palette.slice();
+paletteIndex = 0;
+targetHue = palette[paletteIndex];
+baseHue = targetHue;
+lastPaletteShift = performance.now();
+accentHue = theme.accentHue;
+
+const rootStyle = document.documentElement.style;
+rootStyle.setProperty("--accent-hue", accentHue);
+rootStyle.setProperty("--bg-1", theme.background[0]);
+rootStyle.setProperty("--bg-2", theme.background[1]);
+rootStyle.setProperty("--bg-3", theme.background[2]);
+rootStyle.setProperty("--ambient-a", theme.ambient[0]);
+rootStyle.setProperty("--ambient-b", theme.ambient[1]);
+rootStyle.setProperty("--panel-glow-a", theme.panelGlow[0]);
+rootStyle.setProperty("--panel-glow-b", theme.panelGlow[1]);
+
+if (themeNote){
+themeNote.textContent = theme.description;
+}
+if (themeSelect && themeSelect.value !== currentThemeKey){
+themeSelect.value = currentThemeKey;
+}
+showToast(`Theme: ${theme.label}`);
+}
+
 function softenManualInsanity(level){
 const normalized = clamp(level / 140, 0, 1);
 const gentleRamp = Math.min(normalized / 0.35, 1);
@@ -388,6 +485,7 @@ insanitySlider.value = String(insanityLevel);
 }
 }
 updateInsanity(insanityLevel);
+applyTheme(currentThemeKey);
 
 function resize(){
 pixelRatio = window.devicePixelRatio || 1;
@@ -427,6 +525,11 @@ videoKeepAlive.srcObject = null;
 
 insanitySlider?.addEventListener("input", (evt) => {
 updateInsanity((evt.target || {}).value || insanityLevel);
+});
+
+themeSelect?.addEventListener("change", (evt) => {
+const selected = (evt.target || {}).value || currentThemeKey;
+applyTheme(selected);
 });
 
 function draw(){
