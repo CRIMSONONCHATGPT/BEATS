@@ -1,5 +1,6 @@
 <style>
 :root { color-scheme: dark; --accent-hue: 24; }
+body { --bg-1: #0a0f1e; --bg-2: #050910; --bg-3: #02040a; --glow-a: rgba(255, 99, 71, 0.12); --glow-b: rgba(67, 143, 255, 0.15); }
 * { box-sizing: border-box; }
 html, body {
 margin: 0;
@@ -8,7 +9,7 @@ width: 100%;
 height: 100%;
 min-height: 100vh;
 overflow: hidden;
-background: radial-gradient(circle at 30% 30%, #0a0f1e 0%, #050910 40%, #02040a 70%);
+background: radial-gradient(circle at 30% 30%, var(--bg-1) 0%, var(--bg-2) 40%, var(--bg-3) 70%);
 color: #e8edf3;
 font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -179,6 +180,20 @@ box-shadow: 0 6px 18px rgba(0,0,0,0.35);
     animation: popIn 360ms cubic-bezier(0.18, 0.82, 0.3, 1.2);
 }
 #helpers { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+#artistPanel { grid-column: 1 / -1; display: grid; gap: 10px; }
+#artistPanel p.microcopy { margin: 0; color: #9fb3d8; font-size: 13px; line-height: 1.5; }
+#artistPanel .artist-input { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+#artistPanel input[type="text"] { flex: 1; min-width: 220px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04); color: #e8edf3; }
+#artistPanel button { padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06); color: #fff; cursor: pointer; font-weight: 700; letter-spacing: 0.2px; }
+#artistPanel button.secondary { background: transparent; border-color: rgba(255,255,255,0.08); color: #cdd7e8; }
+#artistPanel .artist-meta { display: grid; gap: 6px; font-size: 13px; color: #c9d5e8; }
+#artistPanel .pill { padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.1); font-size: 11px; letter-spacing: 0.5px; text-transform: uppercase; color: #c3d4f5; }
+#artistPanel .artist-meta strong { color: #f0f4ff; }
+#artistPanel .artist-meta .status { display: inline-flex; align-items: center; gap: 6px; }
+
+#artistPanel .artist-meta .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #6ce8a0; box-shadow: 0 0 10px rgba(108, 232, 160, 0.6); }
+#artistPanel .artist-meta .status.off { color: #ffb3c1; }
+#artistPanel .artist-meta .status.off .dot { background: #ff6b81; box-shadow: 0 0 12px rgba(255, 107, 129, 0.55); }
 @keyframes popIn {
 0% { opacity: 0; transform: translateY(8px) scale(0.94); }
 70% { opacity: 1; transform: translateY(-2px) scale(1.04); }
@@ -223,8 +238,8 @@ z-index: 1;
 #ambientGlow {
 position: fixed;
 inset: 0;
-background: radial-gradient(circle at 20% 20%, rgba(255, 99, 71, 0.12), transparent 45%),
-radial-gradient(circle at 80% 70%, rgba(67, 143, 255, 0.15), transparent 50%);
+background: radial-gradient(circle at 20% 20%, var(--glow-a), transparent 45%),
+radial-gradient(circle at 80% 70%, var(--glow-b), transparent 50%);
 filter: blur(60px);
 z-index: 0;
 }
@@ -259,6 +274,21 @@ body { grid-template-columns: 1fr; padding: 18px; align-items: start; }
 </div>
 
 <div id="helpers">
+<div id="artistPanel" class="panel">
+<h3>Artist-themed visuals</h3>
+<p class="microcopy">Type or pick an artist and the visualizer will shift palettes, background glow, and text to match their sonic universe. If the browser exposes metadata, the theme will auto-switch when a matching artist is detected.</p>
+<div class="artist-input">
+<input id="artistInput" type="text" list="artistList" placeholder="Start typing an artist…" aria-label="Artist name">
+<datalist id="artistList"></datalist>
+<button id="applyArtistBtn">Set theme</button>
+<button id="resetArtistBtn" class="secondary" type="button">Reset</button>
+</div>
+<div class="artist-meta">
+<div><strong>Active artist:</strong> <span id="activeArtist">Default neon storm</span></div>
+<div><strong>Vibe:</strong> <span id="activeArtistMood">Baseline neon chaos tuned to your audio.</span></div>
+<div class="status"><span class="dot"></span><span id="artistDetectStatus">Listening for artist hints from Media Session metadata or page titles.</span></div>
+</div>
+</div>
 <div class="panel">
 <h3>Fast start</h3>
 <ol>
@@ -301,6 +331,14 @@ const insanitySlider = document.getElementById("insanitySlider");
 const insanityValue = document.getElementById("insanityValue");
 const insanityManualValue = document.getElementById("insanityManualValue");
 const insanityAutoValue = document.getElementById("insanityAutoValue");
+const artistInput = document.getElementById("artistInput");
+const artistList = document.getElementById("artistList");
+const applyArtistBtn = document.getElementById("applyArtistBtn");
+const resetArtistBtn = document.getElementById("resetArtistBtn");
+const activeArtistEl = document.getElementById("activeArtist");
+const activeArtistMoodEl = document.getElementById("activeArtistMood");
+const artistDetectStatusEl = document.getElementById("artistDetectStatus");
+const ambientGlow = document.getElementById("ambientGlow");
 const videoKeepAlive = document.createElement("video");
 videoKeepAlive.muted = true;
 videoKeepAlive.playsInline = true;
@@ -317,7 +355,7 @@ let pixelRatio = window.devicePixelRatio || 1;
 const bars = 120;
 
 // Color palette locked to deep neon tones (one hue per scene, concert-style swaps)
-const palette = [320, 28, 212]; // magenta → flame orange → ultraviolet
+let palette = [320, 28, 212]; // magenta → flame orange → ultraviolet
 const paletteHoldMs = 4200;
 let paletteIndex = 0;
 let targetHue = palette[paletteIndex];
@@ -341,6 +379,235 @@ let toastTimeout;
 let insanityLevel = 70;
 let autoInsanity = 0.65;
 let insanityIntensity = 1;
+let currentArtist = "Default neon storm";
+let manualArtistLock = false;
+
+const theme = (name, paletteHues, mood, accent = paletteHues[0], depth = 1, glowShift = 0) => ({
+name,
+palette: paletteHues,
+mood,
+accent,
+depth,
+glowShift
+});
+
+const defaultTheme = theme(
+"Default neon storm",
+[320, 28, 212],
+"Baseline neon chaos tuned to your audio.",
+24,
+1,
+0
+);
+
+const artistThemes = [
+theme("Travis Scott", [290, 12, 206], "Dark, trippy, rage-filled universe where chaos, hype, and psychedelia collide.", 310, 1.15, 12),
+theme("Taylor Swift", [320, 18, 280], "Midnight pop shimmer with cinematic sparkle and confessional glow.", 322, 0.9, 8),
+theme("Drake", [210, 32, 330], "Late-night luxe blues with crisp club minimalism and smooth haze.", 210, 1, 4),
+theme("Bad Bunny", [38, 185, 312], "Tropical neon, urbano heat, and beachside fireworks.", 42, 1.05, 6),
+theme("The Weeknd", [350, 210, 24], "After-hours chrome, noir synths, and crimson spotlights.", 350, 1.1, 10),
+theme("Ariana Grande", [300, 330, 42], "Glittering pink-violet pop with airy sparkle and spotlight flares.", 310, 0.95, 6),
+theme("BTS", [280, 205, 330], "Galaxy purples, stadium strobes, and hopeful pastel beams.", 285, 1, 8),
+theme("Billie Eilish", [140, 210, 320], "Moody emerald shadows with icy blue whispers and ghostly bloom.", 140, 1.1, -6),
+theme("Dua Lipa", [320, 200, 32], "Disco-future magentas, chrome blues, and dancefloor sheen.", 320, 0.95, 4),
+theme("Ed Sheeran", [24, 16, 32], "Warm acoustic ambers with soft campfire glow and folk-pop comfort.", 26, 0.85, 2),
+theme("Justin Bieber", [280, 32, 200], "Cool lavender pop with glacier blues and soft-focus highlights.", 280, 0.95, 4),
+theme("Olivia Rodrigo", [260, 308, 20], "Teenage riot purple, diary ink, and cathartic spotlight blasts.", 268, 1, 6),
+theme("Post Malone", [32, 205, 12], "Dusky amber haze with desert twilight and tattoo neon flicker.", 32, 1, 2),
+theme("Doja Cat", [330, 24, 210], "Playful cyber pinks, feline chrome, and surreal club candy.", 330, 1, 8),
+theme("Harry Styles", [14, 320, 192], "Retro sunset gradients, velvet disco, and free-spirited bloom.", 18, 0.95, 6),
+theme("Kendrick Lamar", [210, 28, 12], "Compton dusk blues, sharp contrast, and conscious cinematic grit.", 210, 1.05, 0),
+theme("SZA", [315, 210, 120], "Moody rose, ocean teal, and ethereal R&B shimmer.", 316, 0.95, 4),
+theme("Karol G", [192, 30, 332], "Aqua-pink reggaeton glow with festival lasers and celebratory sparks.", 195, 1.05, 6),
+theme("J Balvin", [42, 182, 320], "Color block urbano energy with sunrise oranges and urban teal.", 46, 1.05, 6),
+theme("Shakira", [44, 200, 10], "Golden rhythms, tropical heat, and fierce spotlight swirls.", 44, 1, 4),
+theme("Rosalía", [350, 24, 220], "Flamenco red, glossy chrome, and avant-pop glare.", 0, 1.05, 10),
+theme("Lil Nas X", [305, 26, 210], "Cowboy neon, meme pinks, and futuristic rodeo lights.", 305, 1, 6),
+theme("Imagine Dragons", [28, 210, 320], "Volcanic embers, electric teal, and cinematic thunder.", 32, 1.05, 4),
+theme("Coldplay", [200, 48, 320], "Festival rainbow wash with aurora tones and hopeful glow.", 200, 0.95, 6),
+theme("Rihanna", [12, 320, 210], "Caribbean crimson, luxe violet, and runway strobes.", 12, 1, 8),
+theme("Beyoncé", [42, 260, 320], "Golden Renaissance light, regal blues, and stadium dazzle.", 44, 1.05, 8),
+theme("Metro Boomin", [290, 210, 32], "Noir purple skylines, cinematic bass, and dramatic flashes.", 292, 1.1, 10),
+theme("Future", [210, 32, 320], "Icy trap blues, code-green neon, and midnight rain.", 210, 1, 6),
+theme("21 Savage", [350, 24, 210], "Red tactical lasers, chrome shadows, and stealth bass growl.", 350, 1.05, 10),
+theme("Lil Baby", [210, 48, 32], "Streetlight blues, amber grit, and urgent trap pulse.", 210, 1, 4),
+theme("Anitta", [332, 42, 192], "Carnaval magenta, beachside teal, and baile-funk spark.", 332, 1.05, 6),
+theme("Megan Thee Stallion", [330, 14, 210], "Hot girl pink fire, steel blue edges, and boss-level flashes.", 330, 1.05, 10),
+theme("Nicki Minaj", [330, 200, 28], "Barbie pink neon, queenly gold, and animated swagger.", 332, 1, 8),
+theme("Bruno Mars", [32, 12, 320], "Uptown funk brass, champagne gold, and silk-soul shimmer.", 34, 0.9, 4),
+theme("Marshmello", [210, 12, 320], "Candy-coated EDM blues with happy pastel flashes.", 210, 0.95, 4),
+theme("Calvin Harris", [32, 200, 300], "Sunset house oranges, Balearic teal, and glossy sheen.", 34, 1, 4),
+theme("David Guetta", [32, 200, 340], "Big-room oranges, cobalt beams, and festival confetti.", 32, 1.05, 6),
+theme("Tiësto", [210, 30, 320], "Club cobalt, magenta strobes, and Dutch trance glow.", 210, 1.05, 8),
+theme("Swedish House Mafia", [210, 12, 320], "Monochrome lasers, ice-blue rush, and afterhours haze.", 210, 1.1, 6),
+theme("Skrillex", [12, 210, 320], "Aggro bass red, glitch neon cyan, and sawtooth strobe.", 12, 1.15, 12),
+theme("Diplo", [46, 200, 320], "Global bass sunset with desert golds and turquoise pops.", 46, 1, 6),
+theme("Zedd", [210, 320, 24], "Prismatic EDM blues, violet prisms, and precision lasers.", 210, 1, 6),
+theme("Kygo", [28, 190, 320], "Tropical house sunset with palm pinks and ocean breeze blues.", 28, 0.9, 4),
+theme("The Chainsmokers", [210, 320, 32], "Indie-electro haze, city neon, and late-night rooftop glow.", 210, 1, 4),
+theme("Jack Harlow", [210, 28, 12], "Bourbon twilight blues, minimal amber, and suave sheen.", 210, 1, 2),
+theme("J. Cole", [42, 210, 12], "Forest green, notebook amber, and soulful dusk sky.", 42, 0.95, 2),
+theme("Tyler, The Creator", [120, 320, 48], "Pastel chaos, mint greens, and playful surrealism.", 120, 0.95, 6),
+theme("Lil Uzi Vert", [300, 210, 24], "Violet rage, chrome cyan, and animated arcade flash.", 305, 1.1, 10),
+theme("Playboi Carti", [350, 210, 24], "Vamp red, glitchy blacklight, and punked-out strobes.", 350, 1.1, 12),
+theme("Peso Pluma", [42, 170, 320], "Corridos modernos with brass golds and deep midnight teal.", 44, 1, 4),
+theme("Feid", [110, 42, 320], "Bichota green glow, urban amber, and reggaeton punch.", 112, 1, 6),
+theme("Myke Towers", [210, 32, 320], "Steel blue night drives, crimson taillights, and urbano polish.", 210, 1, 6),
+theme("Quevedo", [200, 32, 320], "Canary Island breeze, ocean cobalt, and dusk magenta.", 200, 1, 4),
+theme("Rema", [24, 180, 320], "Afrobeats sunset, burnt orange, and glowing jungle teal.", 26, 1, 6),
+theme("Burna Boy", [44, 120, 320], "Lagos gold, emerald cloth, and stadium fireworks.", 44, 1.05, 6),
+theme("Wizkid", [40, 120, 320], "Afro-fusion warmth, palm gradients, and Lagos night neon.", 42, 1, 6),
+theme("Ice Spice", [28, 320, 220], "Bronx orange, playful pink edges, and spicy bass sparkle.", 30, 1, 8),
+theme("Lana Del Rey", [210, 12, 320], "Cinematic sepia blues, noir lavender, and Americana glow.", 210, 0.95, 2),
+theme("Paramore", [20, 320, 210], "Emo sunset orange, adrenaline pink, and pop-punk sparks.", 22, 1.05, 8),
+theme("Arctic Monkeys", [210, 12, 32], "Indie noir, desert motel amber, and late-night reverb.", 210, 1, 2),
+theme("The 1975", [320, 200, 32], "Neon rectangles, rose mist, and monochrome pop sheen.", 322, 0.95, 6),
+theme("Miley Cyrus", [28, 320, 210], "Rebel sunset, rock chrome, and glitter grit.", 28, 1, 6),
+theme("BLACKPINK", [330, 210, 32], "Bl-pink lasers, K-pop gloss, and synchronized sparkle.", 332, 1.05, 10),
+theme("Stray Kids", [210, 350, 24], "Industrial teal, glitch red, and kinetic fourth-gen punch.", 210, 1.05, 10),
+theme("Seventeen", [280, 210, 32], "Fresh pastel violet, aqua beams, and choreo-clean shine.", 282, 0.95, 6),
+theme("Aespa", [300, 200, 24], "Aes metaverse neon, AI cyan, and futuristic candy.", 300, 1, 8),
+theme("NewJeans", [200, 320, 32], "Y2K bubble blues, denim tones, and playful pastel pop.", 200, 0.9, 6),
+theme("Selena Gomez", [330, 20, 200], "Elegant blush, soft lavender, and calm midnight pop.", 332, 0.9, 4),
+theme("Camila Cabello", [24, 320, 210], "Havana heat, rose gold, and romantic seaside glow.", 26, 0.95, 6),
+theme("Daddy Yankee", [44, 210, 320], "Gasolina amber, streetlight teal, and reggaeton grit.", 46, 1.05, 8),
+theme("Maluma", [32, 200, 320], "Velvet gold, orchid magenta, and suave club lights.", 32, 1, 6),
+theme("Ozuna", [48, 190, 320], "Caribbean sunset orange, aqua neon, and melodic sparkle.", 48, 1, 6),
+theme("Farruko", [32, 210, 320], "Island amber, cobalt beams, and bassy cruise control.", 32, 1, 4),
+theme("Becky G", [330, 40, 210], "Fiery pink, urban gold, and West Coast gloss.", 332, 1, 6),
+theme("DJ Snake", [110, 210, 320], "Parisian green laser, jungle teal, and bass thunder.", 112, 1.05, 8),
+theme("Alesso", [210, 320, 32], "Progressive blue skies, magenta peaks, and clean drops.", 210, 1, 6),
+theme("Steve Aoki", [190, 320, 24], "Rave cyan, cake-throw confetti, and high-voltage strobes.", 190, 1.05, 10),
+theme("Porter Robinson", [210, 320, 12], "Emotive sky blues, pastel bloom, and anime shimmer.", 210, 0.9, 4),
+theme("Madeon", [330, 210, 32], "Chromatic French electro, prismatic gold, and pixel glints.", 330, 0.95, 6),
+theme("Illenium", [24, 210, 320], "Emotional phoenix amber, frost teal, and soaring bloom.", 24, 1, 6),
+theme("Kaskade", [210, 320, 32], "Deep house cobalt, coral blush, and sunrise lift.", 210, 0.95, 6),
+theme("Alan Walker", [210, 180, 320], "Hooded neon blue, misty grey, and cinematic drops.", 210, 1, 2),
+theme("Avicii", [42, 200, 320], "Eternal sunset house, golden fields, and hopeful lasers.", 42, 1, 4),
+theme("deadmau5", [350, 210, 24], "Techno red ears, cold cyan grids, and cube-room flashes.", 350, 1.05, 10),
+theme("Martin Garrix", [210, 320, 32], "Electro cobalt, pink confetti, and triumphant drops.", 210, 1, 6),
+theme("Nora En Pure", [170, 200, 320], "Deep-green waves, alpine blues, and organic house calm.", 170, 0.9, 2),
+theme("ODESZA", [24, 200, 320], "Sunset tribal amber, coastal teal, and cinematic drums.", 24, 1, 4),
+theme("Tame Impala", [280, 120, 320], "Psychedelic plum, desert mustard, and swirling fuzz.", 280, 1, 6),
+theme("Glass Animals", [120, 320, 32], "Heatwave lime, tropical pink, and hazy poolside shine.", 122, 1, 6),
+theme("Lorde", [220, 320, 32], "Solar eclipse blues, royal violets, and intimate glow.", 222, 0.95, 4),
+theme("Halsey", [330, 210, 32], "Stormy magenta, electric teal, and cinematic noir.", 332, 1, 6),
+theme("Khalid", [200, 32, 320], "Southwest twilight blues, desert amber, and smooth gradients.", 200, 0.95, 4),
+theme("Tate McRae", [320, 210, 32], "Electric cherry, cool cyan, and dance-pop sheen.", 322, 1, 6),
+theme("Sabrina Carpenter", [320, 24, 210], "Cinematic blush, starlet gold, and playful stage lights.", 322, 0.95, 6),
+theme("PinkPantheress", [310, 200, 120], "UK garage pastel, bubblegum blush, and hazy breakbeats.", 312, 0.9, 4),
+theme("Central Cee", [210, 24, 12], "London blue steel, amber streetlights, and drill minimalism.", 210, 1, 2),
+theme("Stormzy", [210, 12, 12], "Rain-soaked monochrome, gold trim, and commanding bass.", 210, 1, 2),
+theme("Gunna", [28, 210, 320], "Drip orange, cool aqua, and luxurious trap glow.", 30, 1, 6),
+theme("Yeat", [260, 320, 32], "Bell-heavy purple, cyber lime, and surreal rage energy.", 262, 1.05, 10),
+theme("Shawn Mendes", [210, 32, 320], "Acoustic blue, warm spotlight gold, and heartfelt arena glow.", 212, 0.95, 4)
+];
+
+const artistThemeMap = artistThemes.reduce((map, entry) => {
+map[entry.name.toLowerCase()] = entry;
+return map;
+}, {});
+
+function buildBackgroundFromPalette(paletteHues, depth = 1, glowShift = 0){
+const [h1, h2, h3] = paletteHues;
+const bg1 = `hsl(${h1 + glowShift * 0.2}, 70%, ${Math.max(6, 18 / depth)}%)`;
+const bg2 = `hsl(${h2 + glowShift * 0.4}, 68%, ${Math.max(4, 10 / depth)}%)`;
+const bg3 = `hsl(${h3 + glowShift * 0.1}, 72%, ${Math.max(2, 6 / depth)}%)`;
+const glowA = `hsla(${h1 + glowShift}, 95%, 65%, 0.14)`;
+const glowB = `hsla(${h2 + glowShift * 0.6}, 85%, 60%, 0.12)`;
+return { bg1, bg2, bg3, glowA, glowB };
+}
+
+function setArtistStatus(message, ok = true){
+if (!artistDetectStatusEl) return;
+artistDetectStatusEl.textContent = message;
+const statusRow = artistDetectStatusEl.closest(".status");
+if (statusRow){
+statusRow.classList.toggle("off", !ok);
+const dot = statusRow.querySelector(".dot");
+dot?.classList.toggle("off", !ok);
+}
+}
+
+function applyThemeVisuals(themeData){
+const visuals = buildBackgroundFromPalette(themeData.palette, themeData.depth, themeData.glowShift);
+document.body.style.setProperty("--bg-1", visuals.bg1);
+document.body.style.setProperty("--bg-2", visuals.bg2);
+document.body.style.setProperty("--bg-3", visuals.bg3);
+document.body.style.background = `radial-gradient(circle at 30% 30%, var(--bg-1) 0%, var(--bg-2) 40%, var(--bg-3) 70%)`;
+document.body.style.setProperty("--glow-a", visuals.glowA);
+document.body.style.setProperty("--glow-b", visuals.glowB);
+if (ambientGlow){
+ambientGlow.style.background = `radial-gradient(circle at 20% 20%, var(--glow-a), transparent 45%), radial-gradient(circle at 80% 70%, var(--glow-b), transparent 50%)`;
+}
+}
+
+function applyArtistTheme(name, source = "manual"){ // name can be null/undefined to reset
+const normalized = (name || "").trim().toLowerCase();
+const themeData = artistThemeMap[normalized] || defaultTheme;
+const isKnown = Boolean(artistThemeMap[normalized]);
+palette = themeData.palette;
+paletteIndex = 0;
+targetHue = palette[0];
+baseHue = targetHue;
+accentHue = themeData.accent || targetHue;
+lastPaletteShift = performance.now();
+document.documentElement.style.setProperty("--accent-hue", accentHue.toFixed(1));
+applyThemeVisuals(themeData);
+if (activeArtistEl){
+activeArtistEl.textContent = themeData.name;
+}
+if (activeArtistMoodEl){
+activeArtistMoodEl.textContent = themeData.mood;
+}
+currentArtist = themeData.name;
+const sourceLabel = source === "auto" ? "Auto-detected" : source === "message" ? "External signal" : "Manual";
+if (!isKnown && normalized){
+setArtistStatus(`No saved theme for “${name}”. Using default neon storm while listening for matches.`, false);
+} else {
+setArtistStatus(`${sourceLabel} theme: ${themeData.name}`, true);
+}
+showToast(`${sourceLabel}: ${themeData.name} theme engaged`);
+}
+
+applyArtistTheme();
+
+function populateArtistList(){
+if (!artistList) return;
+artistList.innerHTML = artistThemes.map((entry) => `<option value="${entry.name}"></option>`).join("");
+}
+populateArtistList();
+
+function findArtistMatch(text){
+if (!text) return null;
+const lower = text.toLowerCase();
+return artistThemes.find((entry) => lower.includes(entry.name.toLowerCase()));
+}
+
+function checkForArtistHint(){
+if (manualArtistLock) return;
+let candidate = null;
+try {
+const metaArtist = navigator.mediaSession?.metadata?.artist;
+const metaTitle = navigator.mediaSession?.metadata?.title;
+const docTitle = document.title;
+candidate = findArtistMatch(metaArtist) || findArtistMatch(metaTitle) || findArtistMatch(docTitle);
+if (!candidate && window.__artistNowPlaying){
+candidate = findArtistMatch(String(window.__artistNowPlaying));
+}
+} catch (_) {
+// ignore cross-surface metadata issues
+}
+
+if (candidate && candidate.name !== currentArtist){
+setArtistStatus(`Auto-matched ${candidate.name} from metadata hints.`, true);
+applyArtistTheme(candidate.name, "auto");
+} else if (!candidate) {
+setArtistStatus(manualArtistLock ? "Manual artist lock active." : "Listening for artist hints from Media Session metadata or page titles.", !manualArtistLock);
+}
+}
+
+setInterval(checkForArtistHint, 3500);
 
 function setStatus(msg, tone = "normal"){
 if (statusEl){
@@ -427,6 +694,40 @@ videoKeepAlive.srcObject = null;
 
 insanitySlider?.addEventListener("input", (evt) => {
 updateInsanity((evt.target || {}).value || insanityLevel);
+});
+
+function lockManualArtist(){
+manualArtistLock = true;
+setArtistStatus(`Manual artist lock on ${currentArtist}.`, false);
+}
+
+applyArtistBtn?.addEventListener("click", () => {
+const name = artistInput?.value || currentArtist;
+applyArtistTheme(name, "manual");
+lockManualArtist();
+});
+
+artistInput?.addEventListener("keydown", (evt) => {
+if (evt.key === "Enter"){
+applyArtistTheme(artistInput.value, "manual");
+lockManualArtist();
+}
+});
+
+resetArtistBtn?.addEventListener("click", () => {
+manualArtistLock = false;
+artistInput.value = "";
+applyArtistTheme();
+setArtistStatus("Auto-detect resumed. Listening for artist hints from metadata.", true);
+});
+
+window.addEventListener("message", (event) => {
+const artistName = event?.data?.artist || event?.data?.artistName;
+if (artistName){
+manualArtistLock = false;
+applyArtistTheme(String(artistName), "message");
+setArtistStatus("External artist signal received.", true);
+}
 });
 
 function draw(){
